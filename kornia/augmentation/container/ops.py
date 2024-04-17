@@ -2,6 +2,7 @@ import copy
 from abc import ABCMeta, abstractmethod
 from typing import Any, Callable, Dict, Generic, List, Optional, Type, TypeVar, Union
 
+import torch
 from typing_extensions import ParamSpec
 
 import kornia.augmentation as K
@@ -182,6 +183,11 @@ def get_geometric_only_param(module: "K.container.ImageSequentialBase", param: L
 class InputSequentialOps(SequentialOpsInterface[Tensor]):
     @classmethod
     def transform(cls, input: Tensor, module: Module, param: ParamItem, extra_args: Dict[str, Any] = {}) -> Tensor:
+        dtype = None
+        if not torch.is_floating_point(input):
+            dtype = input.dtype
+            input = input.float()
+
         if isinstance(module, (_AugmentationBase, K.MixAugmentationBaseV2)):
             input = module(input, params=cls.get_instance_module_param(param), data_keys=[DataKey.INPUT], **extra_args)
         elif isinstance(module, (K.container.ImageSequentialBase,)):
@@ -192,10 +198,16 @@ class InputSequentialOps(SequentialOpsInterface[Tensor]):
             if param.data is not None:
                 raise AssertionError(f"Non-augmentaion operation {param.name} require empty parameters. Got {param}.")
             input = module(input)
+        if dtype:
+            input = input.to(dtype)
         return input
 
     @classmethod
     def inverse(cls, input: Tensor, module: Module, param: ParamItem, extra_args: Dict[str, Any] = {}) -> Tensor:
+        dtype = None
+        if not torch.is_floating_point(input):
+            dtype = input.dtype
+            input = input.float()
         if isinstance(module, K.GeometricAugmentationBase2D):
             input = module.inverse(input, params=cls.get_instance_module_param(param), **extra_args)
         elif isinstance(module, (K.GeometricAugmentationBase3D,)):
@@ -208,6 +220,10 @@ class InputSequentialOps(SequentialOpsInterface[Tensor]):
             input = module.inverse_inputs(input, params=cls.get_sequential_module_param(param), extra_args=extra_args)
         elif isinstance(module, K.container.ImageSequentialBase):
             input = module.inverse_inputs(input, params=cls.get_sequential_module_param(param), extra_args=extra_args)
+
+        if dtype:
+            input = input.to(dtype)
+
         return input
 
 
@@ -240,6 +256,11 @@ class MaskSequentialOps(SequentialOpsInterface[Tensor]):
                 to apply transformations.
             param: the corresponding parameters to the module.
         """
+        dtype = None
+        if not torch.is_floating_point(input):
+            dtype = input.dtype
+            input = input.float()
+
         if isinstance(module, (K.GeometricAugmentationBase2D,)):
             input = module.transform_masks(
                 input,
@@ -269,7 +290,10 @@ class MaskSequentialOps(SequentialOpsInterface[Tensor]):
             input = module.transform_masks(input, params=cls.get_sequential_module_param(param), extra_args=extra_args)
 
         elif isinstance(module, (K.auto.operations.OperationBase,)):
-            return MaskSequentialOps.transform(input, module=module.op, param=param, extra_args=extra_args)
+            input = MaskSequentialOps.transform(input, module=module.op, param=param, extra_args=extra_args)
+
+        if dtype:
+            input = input.to(dtype)
         return input
 
     @classmethod
@@ -344,6 +368,11 @@ class MaskSequentialOps(SequentialOpsInterface[Tensor]):
                 to apply transformations.
             param: the corresponding parameters to the module.
         """
+        dtype = None
+        if not torch.is_floating_point(input):
+            dtype = input.dtype
+            input = input.float()
+
         if isinstance(module, (K.GeometricAugmentationBase2D,)):
             if module.transform_matrix is None:
                 raise ValueError(f"No valid transformation matrix found in {module.__class__}.")
@@ -365,7 +394,10 @@ class MaskSequentialOps(SequentialOpsInterface[Tensor]):
             input = module.inverse_masks(input, params=cls.get_sequential_module_param(param), extra_args=extra_args)
 
         elif isinstance(module, (K.auto.operations.OperationBase,)):
-            return MaskSequentialOps.inverse(input, module=module.op, param=param, extra_args=extra_args)
+            input = MaskSequentialOps.inverse(input, module=module.op, param=param, extra_args=extra_args)
+
+        if dtype:
+            input = input.to(dtype)
 
         return input
 

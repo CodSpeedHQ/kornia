@@ -555,13 +555,17 @@ class TestAugmentationSequential:
         else:
             assert (*(1,) * (4 - len(img_shape)), *img_shape) == out[0].shape
 
-            out_mask_shape = tuple(x if x else 1 for x in (B, C_m, *img_shape[-2:]))
+            out_mask_shape = tuple(x or 1 for x in (B, C_m, *img_shape[-2:]))
             assert out[1].shape == out_mask_shape
 
     @pytest.mark.slow
     @pytest.mark.parametrize("random_apply", [1, (2, 2), (1, 2), (2,), 10, True, False])
+    @pytest.mark.parametrize("dtype", [torch.int32, torch.int64, torch.float32])
     def test_forward_and_inverse(self, random_apply, device, dtype):
-        inp = torch.randn(1, 3, 1000, 500, device=device, dtype=dtype)
+        if dtype not in [torch.float32, torch.float64]:
+            inp = torch.randint(0, 255, (1, 3, 1000, 500), device=device, dtype=dtype)
+        else:
+            inp = torch.randn(1, 3, 1000, 500, device=device, dtype=dtype)
         bbox = torch.tensor([[[355, 10], [660, 10], [660, 250], [355, 250]]], device=device, dtype=dtype)
         keypoints = torch.tensor([[[465, 115], [545, 116]]], device=device, dtype=dtype)
         mask = bbox_to_mask(
