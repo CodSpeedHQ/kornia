@@ -103,7 +103,7 @@ class RANSAC(Module):
             return 1.0
         if n_inl == num_tc:
             return 1.0
-        return math.log(1.0 - conf) / max(eps, math.log(max(eps, 1.0 - math.pow(n_inl / num_tc, sample_size))))
+        return math.log(1.0 - conf) / min(-eps, math.log(max(eps, 1.0 - math.pow(n_inl / num_tc, sample_size))))
 
     def estimate_model_from_minsample(self, kp1: Tensor, kp2: Tensor) -> Tensor:
         batch_size, sample_size = kp1.shape[:2]
@@ -160,7 +160,7 @@ class RANSAC(Module):
             KORNIA_CHECK_SHAPE(kp2, ["N", "2"])
             if not (kp1.shape[0] == kp2.shape[0]) or (kp1.shape[0] < self.minimal_sample_size):
                 raise ValueError(
-                    "kp1 and kp2 should be                                  equal shape at at least"
+                    "kp1 and kp2 should be                                  equal shape at least"
                     f" [{self.minimal_sample_size}, 2],                                  got {kp1.shape}, {kp2.shape}"
                 )
         if self.model_type == "homography_from_linesegments":
@@ -168,7 +168,7 @@ class RANSAC(Module):
             KORNIA_CHECK_SHAPE(kp2, ["N", "2", "2"])
             if not (kp1.shape[0] == kp2.shape[0]) or (kp1.shape[0] < self.minimal_sample_size):
                 raise ValueError(
-                    "kp1 and kp2 should be                                  equal shape at at least"
+                    "kp1 and kp2 should be                                  equal shape at least"
                     f" [{self.minimal_sample_size}, 2, 2],                                  got {kp1.shape},"
                     f" {kp2.shape}"
                 )
