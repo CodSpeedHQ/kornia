@@ -2,13 +2,120 @@ import datetime
 import math
 import os
 from functools import wraps
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple, Union
+
+import torch
 
 import kornia
 
-from ._backend import Module, Tensor, from_numpy
+from ._backend import Module, Tensor, from_numpy, rand
 from .external import PILImage as Image
 from .external import numpy as np
+from .external import onnx
+
+
+class ONNXExportMixin:
+    """Mixin class that provides ONNX export functionality for objects that support it.
+
+    Attributes:
+        ONNX_EXPORTABLE:
+            A flag indicating whether the object can be exported to ONNX. Default is True.
+        ONNX_DEFAULT_INPUTSHAPE:
+            Default input shape for the ONNX export. A list of integers where `-1` indicates
+            dynamic dimensions. Default is [-1, -1, -1, -1].
+        ONNX_DEFAULT_OUTPUTSHAP:
+            Default output shape for the ONNX export. A list of integers where `-1` indicates
+            dynamic dimensions. Default is [-1, -1, -1, -1].
+        ONNX_EXPORT_PSEUDO_SHAPE:
+            This is used to create a dummy input tensor for the ONNX export. Default is [1, 3, 256, 256].
+            It dimension shall match the ONNX_DEFAULT_INPUTSHAPE and ONNX_DEFAULT_OUTPUTSHAPE.
+            Non-image dimensions are allowed.
+
+    Note:
+        - If `ONNX_EXPORTABLE` is False, indicating that the object cannot be exported to ONNX.
+    """
+
+    ONNX_EXPORTABLE: bool = True
+    ONNX_DEFAULT_INPUTSHAPE: ClassVar[List[int]] = [-1, -1, -1, -1]
+    ONNX_DEFAULT_OUTPUTSHAPE: ClassVar[List[int]] = [-1, -1, -1, -1]
+    ONNX_EXPORT_PSEUDO_SHAPE: ClassVar[List[int]] = [1, 3, 256, 256]
+    ADDITIONAL_METADATA: ClassVar[List[Tuple[str, str]]] = []
+
+    def to_onnx(
+        self,
+        onnx_name: Optional[str] = None,
+        input_shape: Optional[List[int]] = None,
+        output_shape: Optional[List[int]] = None,
+    ) -> None:
+        """Exports the current object to an ONNX model file.
+
+        Args:
+            onnx_name:
+                The name of the output ONNX file. If not provided, a default name in the
+                format "Kornia-<ClassName>.onnx" will be used.
+            input_shape:
+                The input shape for the model as a list of integers. If None,
+                `ONNX_DEFAULT_INPUTSHAPE` will be used. Dynamic dimensions can be indicated by `-1`.
+            output_shape:
+                The output shape for the model as a list of integers. If None,
+                `ONNX_DEFAULT_OUTPUTSHAPE` will be used. Dynamic dimensions can be indicated by `-1`.
+
+        Notes:
+            - A dummy input tensor is created based on the provided or default input shape.
+            - Dynamic axes for input and output tensors are configured where dimensions are marked `-1`.
+            - The model is exported with `torch.onnx.export`, with constant folding enabled and opset version set to 17.
+        """
+        if not self.ONNX_EXPORTABLE:
+            raise RuntimeError("This object cannot be exported to ONNX.")
+
+        if input_shape is None:
+            input_shape = self.ONNX_DEFAULT_INPUTSHAPE
+        if output_shape is None:
+            output_shape = self.ONNX_DEFAULT_OUTPUTSHAPE
+
+        if onnx_name is None:
+            onnx_name = f"Kornia-{self.__class__.__name__}.onnx"
+
+        dummy_input = self._create_dummy_input(input_shape)
+        dynamic_axes = self._create_dynamic_axes(input_shape, output_shape)
+
+        torch.onnx.export(
+            self,  # type: ignore
+            dummy_input,
+            onnx_name,
+            export_params=True,
+            opset_version=17,
+            do_constant_folding=True,
+            input_names=["input"],
+            output_names=["output"],
+            dynamic_axes=dynamic_axes,
+        )
+
+        self._add_metadata(onnx_name)
+
+    def _create_dummy_input(self, input_shape: List[int]) -> Union[Tuple[Any, ...], Tensor]:
+        return rand(*[(self.ONNX_EXPORT_PSEUDO_SHAPE[i] if dim == -1 else dim) for i, dim in enumerate(input_shape)])
+
+    def _create_dynamic_axes(self, input_shape: List[int], output_shape: List[int]) -> Dict[str, Dict[int, str]]:
+        return {
+            "input": {i: "dim_" + str(i) for i, dim in enumerate(input_shape) if dim == -1},
+            "output": {i: "dim_" + str(i) for i, dim in enumerate(output_shape) if dim == -1},
+        }
+
+    def _add_metadata(self, onnx_name: str) -> None:
+        onnx_model = onnx.load(onnx_name)  # type: ignore
+
+        for key, value in [
+            ("source", "kornia"),
+            ("version", kornia.__version__),
+            ("class", self.__class__.__name__),
+            *self.ADDITIONAL_METADATA,
+        ]:
+            metadata_props = onnx_model.metadata_props.add()
+            metadata_props.key = key
+            metadata_props.value = str(value)
+
+        onnx.save(onnx_model, onnx_name)  # type: ignore
 
 
 class ImageModuleMixIn:
@@ -219,7 +326,7 @@ class ImageModuleMixIn:
         kornia.io.write_image(name, out_image.mul(255.0).byte())
 
 
-class ImageModule(Module, ImageModuleMixIn):
+class ImageModule(Module, ImageModuleMixIn, ONNXExportMixin):
     """Handles image-based operations.
 
     This modules accepts multiple input and output data types, provides end-to-end

@@ -32,7 +32,7 @@ from ._backend import (
     zeros,
     zeros_like,
 )
-from .module import ImageModule
+from .module import ImageModule, ImageModuleMixIn, ONNXExportMixin
 from .tensor_wrapper import TensorWrapper  # type: ignore
 
 __all__ = [
@@ -70,4 +70,6 @@ __all__ = [
     "TensorWrapper",
     "map_coordinates",
     "ImageModule",
+    "ONNXExportMixin",
+    "ImageModuleMixIn",
 ]

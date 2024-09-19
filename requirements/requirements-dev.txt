@@ -2,11 +2,13 @@ accelerate
 coverage
 diffusers
 mypy
-numpy<2
+numpy<3
 onnx
+onnxruntime
 pillow
 pre-commit>=2
 pytest==8.3.3
 pytest-timeout
 requests
 transformers
+types-requests
