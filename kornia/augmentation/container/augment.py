@@ -588,6 +588,30 @@ class AugmentationSequential(TransformMatrixMinIn, ImageSequential):
             arg = arg.to(self.mask_dtype) if self.mask_dtype else arg.to(torch.float)
         return arg
 
+    def _preproc_mask(self, arg: MaskDataType) -> MaskDataType:
+        if isinstance(arg, list):
+            new_arg = []
+            for a in arg:
+                a_new = a.to(self.input_dtype) if self.input_dtype else a.to(torch.float)
+                new_arg.append(a_new)
+            return new_arg
+
+        else:
+            arg = arg.to(self.input_dtype) if self.input_dtype else arg.to(torch.float)
+        return arg
+
+    def _postproc_mask(self, arg: MaskDataType) -> MaskDataType:
+        if isinstance(arg, list):
+            new_arg = []
+            for a in arg:
+                a_new = a.to(self.mask_dtype) if self.mask_dtype else a.to(torch.float)
+                new_arg.append(a_new)
+            return new_arg
+
+        else:
+            arg = arg.to(self.mask_dtype) if self.mask_dtype else arg.to(torch.float)
+        return arg
+
     def _preproc_boxes(self, arg: DataType, dcate: DataKey) -> Boxes:
         if DataKey.get(dcate) in [DataKey.BBOX]:
             mode = "vertices_plus"
